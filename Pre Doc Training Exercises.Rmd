@@ -1,0 +1,96 @@
+---
+title: "Pre Doc Training Exercises"
+output: pdf_document
+date: '2022-06-20'
+---
+
+You will be working with the Social Connectedness Index (SCI), a dataset built from an anonymized snapshot of Facebook users and their friendship networks. The data measure the intensity of social connections between counties. (For one overview, see this coverage in the New York Times). The task is broken into two parts.
+
+```{r starting, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidycensus)
+library(gt)
+
+data("fips_codes")
+countydistance <- read.csv("sf12010countydistancemiles.csv")
+county <- read.table(file = "county_county_sci.tsv", sep = '\t', header = TRUE)
+```
+
+# Part 1
+
+Our team has a presentation coming up to a set of policymakers in Washtenaw County, Michigan. Using the SCI and the county distance datasets, make a set of exploratory plots describing the social connections of Washtenaw County. Specifically:
+
+-   Summarize the distribution of Washtenaw's Social Connectedness Index to other counties
+
+```{r first question, message=FALSE, warning=FALSE}
+
+county %>%
+  filter (user_loc == 26161) %>%
+  ggplot(aes(x= log(scaled_sci), fill = "#FF6666")) + 
+  geom_histogram() +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = "Washtenaw County's Social Connectedness Index to other counties",
+       x = "Logged (symmetric) Social Connectedness Index",
+       y = "Number of Counties")
+
+```
+
+-   Which counties are most strongly connected to Washtenaw?
+
+```{r most connected counties}
+county %>%
+  filter (user_loc == 26161) %>%
+  mutate(county_code = str_sub(fr_loc, 3, 5)) %>%
+  left_join(fips_codes, by = "county_code") %>%
+  arrange(desc(scaled_sci)) %>%
+  head(20) %>%
+  group_by(state_name) %>%
+  select(state_name, county, scaled_sci) %>%
+  gt() %>%  
+  tab_header(title = md("**Top 20 Mostly Connected Counties to Washtenaw**"),
+             subtitle = "The data is based on Social Connectedness Index (SCI)") %>%
+  tab_source_note(
+    source_note = "Source: Social Connectedness Index (SCI)") %>%
+  tab_source_note(
+    source_note = md("The data is receied from predoc.org")) %>%
+  cols_label(
+    state_name = html("State"),
+    county = html("County"),
+    scaled_sci = html("Scaled Social <br>Connectedness Index")
+  ) %>%
+  cols_align(align = c("center"), columns = everything()) %>%
+  opt_align_table_header(align = c("center"))
+  
+
+  
+
+
+```
+
+-   Merge in the distance data and describe the relationship between distance to Washtenaw and connectedness to Washtenaw
+
+```{r merging datasets, warning=FALSE, message=FALSE}
+
+merged <- county %>%
+  left_join(countydistance, by = c("user_loc" = "county1",
+                                   "fr_loc" = "county2")) %>%
+  na.omit() %>%
+  filter(user_loc == 26161)
+
+correlation_test <- cor.test(merged$scaled_sci, merged$mi_to_county, method = "pearson")
+
+ggplot(merged, aes(x = log(scaled_sci), y = mi_to_county)) +
+  geom_point(alpha = 0.2, color = "orange") +
+  geom_smooth(method = "lm", se = TRUE) +
+  theme_bw() +
+  labs(
+    title = "Distance vs. Connectedness in the case of Washtenaw county",
+    subtitle = "This plot illustrates Washtenaw's Social Connectedness Index against its distance to other counties. These two variables have a **-0.16 pearson correlation score.**",
+    x = "Logged Social Connectedness Index",
+    y = "Distance (mi)")
+
+
+```
+
+# Part 2
